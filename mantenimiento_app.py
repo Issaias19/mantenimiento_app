@@ -96,7 +96,7 @@ with st.form("agregar_equipo"):
         st.success(f"✅ Equipo '{nombre}' agregado correctamente!")
 
 # ----- TABLA EDITABLE -----
-st.subheader("Lista de equipos (editable)")
+st.subheader("Lista de equipos")
 edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
 
 # Guardar si se modifica algo
