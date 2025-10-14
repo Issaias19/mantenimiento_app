@@ -20,16 +20,15 @@ os.makedirs("data", exist_ok=True)
 os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
 # ===============================
-# FUNCIONES DE DATOS
+# Cargar datos
 # ===============================
 def load_data():
     if os.path.exists(DATA_FILE):
         return pd.read_excel(DATA_FILE)
     else:
         df = pd.DataFrame(columns=[
-            "Tipo","Departamento","Sucursal","Responsable",
-            "Posicion","Nombre de Equipo","Correo",
-            "Fecha de Mantenimiento","Hora"
+            "Tipo", "Departamento", "Sucursal", "Responsable", "Posicion",
+            "Nombre de Equipo", "Correo", "Fecha de Mantenimiento", "Hora"
         ])
         df.to_excel(DATA_FILE, index=False)
         return df
@@ -38,7 +37,7 @@ def save_data(df):
     df.to_excel(DATA_FILE, index=False)
 
 # ===============================
-# FUNCIÓN PARA EXPORTAR A PDF
+# Generar PDF
 # ===============================
 def export_pdf(df, filename):
     doc = SimpleDocTemplate(filename, pagesize=landscape(letter))
@@ -47,17 +46,17 @@ def export_pdf(df, filename):
 
     title = Paragraph("Calendario de Mantenimiento Preventivo", styles['Title'])
     elements.append(title)
-    elements.append(Spacer(1,12))
+    elements.append(Spacer(1, 12))
 
     data = [list(df.columns)] + df.values.tolist()
     table = Table(data)
     table.setStyle(TableStyle([
-        ('BACKGROUND',(0,0),(-1,0),colors.gray),
-        ('TEXTCOLOR',(0,0),(-1,0),colors.whitesmoke),
-        ('ALIGN',(0,0),(-1,-1),'CENTER'),
-        ('FONTNAME',(0,0),(-1,0),'Helvetica-Bold'),
-        ('GRID',(0,0),(-1,-1),0.5,colors.black),
-        ('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.whitesmoke,colors.lightgrey])
+        ('BACKGROUND', (0, 0), (-1, 0), colors.gray),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey])
     ]))
     elements.append(table)
     doc.build(elements)
@@ -87,14 +86,21 @@ with st.form("agregar_equipo"):
 
     if submitted and nombre:
         new_row = {
-            "Tipo": tipo, "Departamento": depto, "Sucursal": sucursal,
-            "Responsable": responsable, "Posicion": posicion, "Nombre de Equipo": nombre,
-            "Correo": correo, "Fecha de Mantenimiento": fecha_mantenimiento, "Hora": hora
+            "Tipo": tipo,
+            "Departamento": depto,
+            "Sucursal": sucursal,
+            "Responsable": responsable,
+            "Posicion": posicion,
+            "Nombre de Equipo": nombre,
+            "Correo": correo,
+            "Fecha de Mantenimiento": fecha_mantenimiento,
+            "Hora": str(hora)
         }
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         save_data(df)
-        st.success(f"✅ Equipo '{nombre}' agregado correctamente!")
-# Asegurar tipos de datos consistentes antes de editar
+        st.success(f"✅ Equipo {nombre} agregado correctamente!")
+
+# ----- LIMPIAR TIPOS DE DATOS -----
 for col in df.columns:
     if "Fecha" in col:
         df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
@@ -103,60 +109,49 @@ for col in df.columns:
     else:
         df[col] = df[col].astype(str).fillna("")
 
-# Mostrar tabla editable
+# ----- TABLA EDITABLE -----
+st.subheader("Lista de equipos (editable)")
 edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
 
-# Guardar cambios si el usuario edita algo
 if not edited_df.equals(df):
     save_data(edited_df)
     st.success("✅ Cambios guardados correctamente.")
-
-# ----- TABLA EDITABLE -----
-st.subheader("Lista de equipos")
-edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
-
-# Guardar si se modifica algo
-if not edited_df.equals(df):
-    save_data(edited_df)
-    st.success("💾 Cambios guardados correctamente.")
     df = edited_df
 
-# ----- EXPORTACIÓN -----
+# ===============================
+# EXPORTACIÓN
+# ===============================
 st.subheader("Exportar calendario")
 
-# Calcular rango de semanas disponibles
-df["Fecha de Mantenimiento"] = pd.to_datetime(df["Fecha de Mantenimiento"], errors='coerce')
-df = df.dropna(subset=["Fecha de Mantenimiento"])
-df["Semana"] = df["Fecha de Mantenimiento"].apply(lambda x: x.isocalendar()[1])
-df["Año"] = df["Fecha de Mantenimiento"].dt.year
+if not df.empty:
+    # Convertir fechas
+    df["Fecha de Mantenimiento"] = pd.to_datetime(df["Fecha de Mantenimiento"], errors="coerce")
+    df["Semana"] = df["Fecha de Mantenimiento"].dt.isocalendar().week
+    df["Año"] = df["Fecha de Mantenimiento"].dt.year
 
-# Obtener rangos de fechas por semana
-semana_rangos = {}
-for _, grupo in df.groupby(["Año", "Semana"]):
-    semana = grupo["Semana"].iloc[0]
-    año = grupo["Año"].iloc[0]
-    inicio_semana = grupo["Fecha de Mantenimiento"].min().strftime("%d %b")
-    fin_semana = grupo["Fecha de Mantenimiento"].max().strftime("%d %b")
-    rango = f"Semana {semana} ({inicio_semana} - {fin_semana}) {año}"
-    semana_rangos[(año, semana)] = rango
+    # Agrupar por semana y año
+    semanas = df.groupby(["Año", "Semana"])["Fecha de Mantenimiento"].agg(["min", "max"]).reset_index()
+    semanas["Rango"] = semanas.apply(
+        lambda x: f"Semana del {x['min'].strftime('%d/%m/%Y')} al {x['max'].strftime('%d/%m/%Y')}", axis=1
+    )
 
-# Selector con rangos legibles
-if semana_rangos:
-    selected_label = st.selectbox("📅 Selecciona la semana para exportar", list(semana_rangos.values()))
-    selected_key = list(semana_rangos.keys())[list(semana_rangos.values()).index(selected_label)]
-    año, semana = selected_key
-    df_week = df[(df["Año"] == año) & (df["Semana"] == semana)]
+    selected = st.selectbox("Seleccionar semana a exportar", semanas["Rango"])
 
-    # Exportar Excel
-    excel_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_{año}_semana_{semana}.xlsx")
+    # Filtrar datos según la semana seleccionada
+    semana_sel = semanas[semanas["Rango"] == selected].iloc[0]
+    año_sel, sem_sel = semana_sel["Año"], semana_sel["Semana"]
+    df_week = df[(df["Año"] == año_sel) & (df["Semana"] == sem_sel)]
+
+    # Exportar a Excel
+    excel_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_semana_{año_sel}_{sem_sel}.xlsx")
     df_week.to_excel(excel_filename, index=False)
-    with open(excel_filename, "rb") as f:
-        st.download_button("📥 Descargar Excel", f, file_name=f"mantenimiento_{año}_semana_{semana}.xlsx")
+    with open(excel_filename, "rb") as file:
+        st.download_button("📥 Descargar Excel de la semana seleccionada", file, file_name=f"mantenimiento_{selected}.xlsx")
 
-    # Exportar PDF
-    pdf_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_{año}_semana_{semana}.pdf")
+    # Exportar a PDF
+    pdf_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_semana_{año_sel}_{sem_sel}.pdf")
     export_pdf(df_week, pdf_filename)
-    with open(pdf_filename, "rb") as f:
-        st.download_button("📥 Descargar PDF", f, file_name=f"mantenimiento_{año}_semana_{semana}.pdf")
+    with open(pdf_filename, "rb") as file:
+        st.download_button("📥 Descargar PDF de la semana seleccionada", file, file_name=f"mantenimiento_{selected}.pdf")
 else:
-    st.info("No hay semanas registradas aún para exportar.")
+    st.info("Aún no hay equipos registrados para exportar.")
