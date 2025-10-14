@@ -94,6 +94,22 @@ with st.form("agregar_equipo"):
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
         save_data(df)
         st.success(f"✅ Equipo '{nombre}' agregado correctamente!")
+# Asegurar tipos de datos consistentes antes de editar
+for col in df.columns:
+    if "Fecha" in col:
+        df[col] = pd.to_datetime(df[col], errors="coerce").dt.date
+    elif "Hora" in col:
+        df[col] = df[col].astype(str)
+    else:
+        df[col] = df[col].astype(str).fillna("")
+
+# Mostrar tabla editable
+edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
+
+# Guardar cambios si el usuario edita algo
+if not edited_df.equals(df):
+    save_data(edited_df)
+    st.success("✅ Cambios guardados correctamente.")
 
 # ----- TABLA EDITABLE -----
 st.subheader("Lista de equipos")
