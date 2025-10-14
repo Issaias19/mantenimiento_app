@@ -110,7 +110,7 @@ for col in df.columns:
         df[col] = df[col].astype(str).fillna("")
 
 # ----- TABLA EDITABLE -----
-st.subheader("Lista de equipos (editable)")
+st.subheader("Lista de equipos")
 edited_df = st.data_editor(df, use_container_width=True, num_rows="dynamic")
 
 if not edited_df.equals(df):
