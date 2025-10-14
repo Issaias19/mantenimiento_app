@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from dateutil.relativedelta import relativedelta
 import os
 from reportlab.lib.pagesizes import letter, landscape
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
@@ -13,14 +12,13 @@ from reportlab.lib.styles import getSampleStyleSheet
 # ===============================
 DATA_FILE = "data/equipos.xlsx"
 EXPORT_FOLDER = "exports"
-MAINTENANCE_INTERVAL_MONTHS = 3  # mantenimiento cada 3 meses
 
 # Crear carpetas si no existen
 os.makedirs("data", exist_ok=True)
 os.makedirs(EXPORT_FOLDER, exist_ok=True)
 
 # ===============================
-# Cargar datos
+# Cargar y guardar datos
 # ===============================
 def load_data():
     if os.path.exists(DATA_FILE):
@@ -37,36 +35,31 @@ def save_data(df):
     df.to_excel(DATA_FILE, index=False)
 
 # ===============================
-# Generar PDF (ajustado y formateado)
+# Generar PDF formateado
 # ===============================
-def export_pdf(df, filename):
-    from reportlab.lib.pagesizes import landscape, letter
-    from reportlab.lib import colors
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet
-
+def export_pdf(df, filename, rango_semana):
     df = df.copy()
+
     # Formatear columnas
     if "Fecha de Mantenimiento" in df.columns:
         df["Fecha de Mantenimiento"] = pd.to_datetime(df["Fecha de Mantenimiento"], errors="coerce").dt.strftime("%d-%b-%Y")
     if "Hora" in df.columns:
-        try:
-            df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.strftime("%I:%M %p")
-        except:
-            pass
+        df["Hora"] = pd.to_datetime(df["Hora"], errors="coerce").dt.strftime("%I:%M %p")
 
-    # Documento PDF
+    # Crear documento PDF
     doc = SimpleDocTemplate(filename, pagesize=landscape(letter), leftMargin=25, rightMargin=25, topMargin=25, bottomMargin=25)
     styles = getSampleStyleSheet()
     elements = []
 
-    # Título
+    # Título principal
     title = Paragraph("Calendario de Mantenimiento Preventivo", styles['Title'])
+    subtitle = Paragraph(rango_semana, styles['Normal'])
     elements.append(title)
+    elements.append(subtitle)
     elements.append(Spacer(1, 12))
 
-    # Ajustar anchos de columna dinámicamente
-    col_widths = [max(90, min(150, len(str(col)) * 7)) for col in df.columns]
+    # Ajustar anchos de columnas dinámicamente
+    col_widths = [max(80, min(150, len(str(col)) * 7)) for col in df.columns]
 
     # Crear tabla
     data = [list(df.columns)] + df.values.tolist()
@@ -81,7 +74,6 @@ def export_pdf(df, filename):
         ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.lightgrey]),
     ]))
     elements.append(table)
-
     doc.build(elements)
 
 # ===============================
@@ -147,37 +139,28 @@ if not edited_df.equals(df):
 st.subheader("Exportar calendario")
 
 if not df.empty:
-    df["Fecha de Mantenimiento"] = pd.to_datetime(df["Fecha de Mantenimiento"], errors="coerce")
-    df["Semana"] = df["Fecha de Mantenimiento"].dt.isocalendar().week
-    df["Año"] = df["Fecha de Mantenimiento"].dt.year
+    # --- Formatear rango de fechas personalizado ---
+    min_date = pd.to_datetime(df["Fecha de Mantenimiento"], errors="coerce").min()
+    max_date = pd.to_datetime(df["Fecha de Mantenimiento"], errors="coerce").max()
+    rango_semana = f"Semana del ({min_date.strftime('%d–%b')} al {max_date.strftime('%d–%b %Y')})"
 
-    # Crear rango personalizado: Semana del (20–26 Oct 2025)
-    semanas = df.groupby(["Año", "Semana"])["Fecha de Mantenimiento"].agg(["min", "max"]).reset_index()
-    semanas["Rango"] = semanas.apply(
-        lambda x: f"Semana del ({x['min'].strftime('%d–%b')} al {x['max'].strftime('%d–%b %Y')})", axis=1
-    )
-
-    selected = st.selectbox("Seleccionar semana a exportar", semanas["Rango"])
-
-    # Filtrar por semana seleccionada
-    semana_sel = semanas[semanas["Rango"] == selected].iloc[0]
-    año_sel, sem_sel = semana_sel["Año"], semana_sel["Semana"]
-    df_week = df[(df["Año"] == año_sel) & (df["Semana"] == sem_sel)].copy()
+    st.write(f"📅 Rango actual: **{rango_semana}**")
 
     # --- Formatear antes de exportar ---
-    df_week["Fecha de Mantenimiento"] = df_week["Fecha de Mantenimiento"].dt.strftime("%d-%b-%Y")
-    df_week["Hora"] = pd.to_datetime(df_week["Hora"], errors="coerce").dt.strftime("%I:%M %p")
+    df_export = df.copy()
+    df_export["Fecha de Mantenimiento"] = pd.to_datetime(df_export["Fecha de Mantenimiento"], errors="coerce").dt.strftime("%d-%b-%Y")
+    df_export["Hora"] = pd.to_datetime(df_export["Hora"], errors="coerce").dt.strftime("%I:%M %p")
 
     # --- Exportar Excel ---
-    excel_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_semana_{año_sel}_{sem_sel}.xlsx")
-    df_week.to_excel(excel_filename, index=False)
+    excel_filename = os.path.join(EXPORT_FOLDER, "mantenimiento_semana.xlsx")
+    df_export.to_excel(excel_filename, index=False)
     with open(excel_filename, "rb") as file:
-        st.download_button("📥 Descargar Excel de la semana seleccionada", file, file_name=f"mantenimiento_{selected}.xlsx")
+        st.download_button("📥 Descargar Excel", file, file_name="mantenimiento_semana.xlsx")
 
     # --- Exportar PDF ---
-    pdf_filename = os.path.join(EXPORT_FOLDER, f"mantenimiento_semana_{año_sel}_{sem_sel}.pdf")
-    export_pdf(df_week, pdf_filename)
+    pdf_filename = os.path.join(EXPORT_FOLDER, "mantenimiento_semana.pdf")
+    export_pdf(df_export, pdf_filename, rango_semana)
     with open(pdf_filename, "rb") as file:
-        st.download_button("📥 Descargar PDF de la semana seleccionada", file, file_name=f"mantenimiento_{selected}.pdf")
+        st.download_button("📥 Descargar PDF", file, file_name="mantenimiento_semana.pdf")
 else:
     st.info("Aún no hay equipos registrados para exportar.")
