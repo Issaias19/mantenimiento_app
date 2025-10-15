@@ -84,6 +84,26 @@ st.title("🛠️ Mantenimiento Preventivo de Computadoras")
 
 df = load_data()
 
+# ----- SUBIR ARCHIVO EXCEL (para restaurar o actualizar) -----
+st.sidebar.header("📂 Cargar lista existente")
+uploaded_file = st.sidebar.file_uploader("Subir archivo .xlsx para actualizar la base de datos", type=["xlsx"])
+
+if uploaded_file is not None:
+    try:
+        new_data = pd.read_excel(uploaded_file)
+        # Validar que tenga las columnas necesarias
+        expected_cols = ["Tipo", "Departamento", "Sucursal", "Responsable", "Posicion",
+                         "Nombre de Equipo", "Correo", "Fecha de Mantenimiento", "Hora"]
+        if all(col in new_data.columns for col in expected_cols):
+            new_data = new_data[expected_cols]  # Asegurar orden correcto
+            save_data(new_data)
+            df = new_data
+            st.sidebar.success("✅ Archivo cargado y datos actualizados correctamente.")
+        else:
+            st.sidebar.error("❌ El archivo no tiene las columnas requeridas.")
+    except Exception as e:
+        st.sidebar.error(f"Error al cargar el archivo: {e}")
+
 # ----- FORMULARIO PARA AGREGAR EQUIPO -----
 st.subheader("Agregar nuevo equipo")
 with st.form("agregar_equipo"):
